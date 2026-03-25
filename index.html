@@ -3,453 +3,249 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Restaurant Reservation & Management System</title>
-    <!-- Load Tailwind CSS -->
+    <title>ReservaPro | Enterprise Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Custom styles to enhance aesthetics */
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb; /* Light background for the whole page */
-        }
-        .app-container {
-            min-height: 100vh;
-        }
-        .card {
-            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s ease-in-out;
-        }
-        .btn-primary {
-            background-color: #ef4444; /* Red 500 */
-            transition: background-color 0.2s;
-        }
-        .btn-primary:hover {
-            background-color: #dc2626; /* Red 600 */
-        }
-        .input-field {
-            border-color: #e5e7eb;
-        }
-        .action-button:hover {
-            opacity: 0.8;
-        }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #020617; color: #f1f5f9; }
+        .sidebar-active { background: #1e293b; border-left: 4px solid #6366f1; color: #fff; }
+        .glass-card { background: #0f172a; border: 1px solid #1e293b; }
+        .btn-action:active { transform: scale(0.96); }
+        .cancel-btn:hover { background-color: rgba(244, 63, 94, 0.1); color: #f43f5e; border-color: #f43f5e; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="antialiased">
 
-    <div id="app" class="app-container flex flex-col items-center justify-center p-4">
-        
-        <!-- The Main Card Container -->
-        <div id="main-card" class="card bg-white p-6 md:p-10 w-full max-w-lg rounded-xl">
-            
-            <h1 id="title-header" class="text-3xl font-bold text-gray-900 mb-6 text-center">Welcome</h1>
-            
-            <!-- Content Area - JavaScript will inject the view here -->
-            <div id="content-area">
-                <!-- Content will be rendered here -->
+    <div id="app" class="min-h-screen flex">
+        <aside id="sidebar" class="hidden w-64 bg-[#020617] border-r border-slate-900 flex-col fixed h-full z-20">
+            <div class="p-8 text-2xl font-bold tracking-tight text-indigo-500 italic">Reserva<span class="text-white font-black">PRO</span></div>
+            <nav class="flex-1 px-4 space-y-1" id="nav-links"></nav>
+            <div class="p-6 border-t border-slate-900 text-center">
+                <button onclick="logout()" class="text-slate-500 hover:text-rose-400 font-bold text-[10px] uppercase tracking-widest">Sign Out</button>
             </div>
+        </aside>
 
-        </div>
+        <main id="main-layout" class="flex-1 flex flex-col min-w-0 transition-all duration-300">
+            <header id="top-header" class="hidden h-20 bg-[#020617]/90 backdrop-blur-md border-b border-slate-900 items-center justify-between px-8 sticky top-0 z-10">
+                <div>
+                    <h2 id="view-title" class="text-xl font-bold text-white tracking-tight">Dashboard</h2>
+                    <p class="text-[10px] text-slate-500 uppercase tracking-[0.3em] font-black" id="current-date-display"></p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div id="role-indicator" class="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest">Role</div>
+                    <div class="h-10 w-10 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold uppercase" id="user-initials">JD</div>
+                </div>
+            </header>
+            <div class="flex-1 p-8" id="content-area"></div>
+        </main>
     </div>
 
     <script>
-        // --- Core Application State ---
-        let currentPage = 'roleSelection'; // States: 'roleSelection', 'login', 'customerDashboard', 'managerDashboard', 'reservationForm', 'existingBookings'
-        let userRole = null; // States: 'customer', 'manager'
-        
-        // Mock data for Manager Dashboard (Moved to global scope to allow manipulation)
-        let tableData = [
-            { id: 1, status: 'Occupied', capacity: 4 },
-            { id: 2, status: 'Reserved', capacity: 2 },
-            { id: 3, status: 'Available', capacity: 6 },
-            { id: 4, status: 'Occupied', capacity: 4 },
-            { id: 5, status: 'Reserved', capacity: 8 }
-        ];
+        let state = {
+            page: 'roleSelection',
+            role: null,
+            searchQuery: '',
+            bookings: [], // Shared booking store
+            tables: [
+                { id: 101, status: 'Available', cap: 4, zone: 'Window' },
+                { id: 102, status: 'Available', cap: 2, zone: 'Main Floor' },
+                { id: 103, status: 'Occupied', cap: 6, zone: 'VIP' },
+                { id: 104, status: 'Available', cap: 4, zone: 'Patio' },
+                { id: 105, status: 'Available', cap: 8, zone: 'Main Floor' }
+            ]
+        };
 
-        // --- DOM Elements ---
-        const app = document.getElementById('app');
-        const contentArea = document.getElementById('content-area');
-        const titleHeader = document.getElementById('title-header');
-        
-        // --- Utility Functions ---
+        const content = document.getElementById('content-area');
+        const sidebar = document.getElementById('sidebar');
+        const mainLayout = document.getElementById('main-layout');
+        const topHeader = document.getElementById('top-header');
 
-        // Function to safely set HTML content and remove previous event listeners
-        function renderView(htmlContent, newTitle) {
-            contentArea.innerHTML = htmlContent;
-            titleHeader.textContent = newTitle;
-            // Attach new event listeners after content is injected
-            attachEventListeners();
+        function updateUI() {
+            const isAuth = state.page !== 'roleSelection' && state.page !== 'login';
+            sidebar.classList.toggle('hidden', !isAuth); sidebar.classList.toggle('flex', isAuth);
+            topHeader.classList.toggle('hidden', !isAuth); topHeader.classList.toggle('flex', isAuth);
+            mainLayout.classList.toggle('ml-64', isAuth);
+            
+            if(isAuth) {
+                document.getElementById('current-date-display').innerText = new Date().toDateString();
+                document.getElementById('role-indicator').innerText = state.role;
+                document.getElementById('user-initials').innerText = state.role === 'manager' ? 'ST' : 'GS';
+                renderNav();
+            }
+            render();
         }
 
-        // --- View Rendering Functions ---
+        function render() {
+            if(state.page === 'roleSelection') renderRoleSelection();
+            else if(state.page === 'login') renderLogin();
+            else if(state.page === 'dashboard') {
+                state.role === 'manager' ? renderManagerDash() : renderCustomerPortal();
+            }
+        }
 
+        // --- CUSTOMER PORTAL ---
+        function renderCustomerPortal() {
+            document.getElementById('view-title').innerText = "Guest Services";
+            content.innerHTML = `
+                <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+                    <div class="lg:col-span-2 glass-card p-10 rounded-[2.5rem] border-t-4 border-t-indigo-500 shadow-2xl">
+                        <h3 class="text-2xl font-black text-white mb-6">Request a Table</h3>
+                        <form onsubmit="handleCustomerBooking(event)" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div><label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Name</label>
+                                 <input type="text" required id="c-name" class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white outline-none focus:ring-2 focus:ring-indigo-500"></div>
+                            <div><label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Guests</label>
+                                 <select id="c-guests" class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white outline-none"><option>1-2 Guests</option><option>2-4 Guests</option><option>VIP (6+ Guests)</option></select></div>
+                            <div><label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Date</label>
+                                 <input type="date" required id="c-date" class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white outline-none"></div>
+                            <div><label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Time</label>
+                                 <input type="time" required id="c-time" class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white outline-none"></div>
+                            <button type="submit" class="md:col-span-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-2xl font-black shadow-xl active:scale-95 transition-all">Confirm Request</button>
+                        </form>
+                    </div>
+                    <div class="glass-card p-8 rounded-[2rem]">
+                        <h3 class="text-white font-bold mb-6">Your Bookings</h3>
+                        <div class="space-y-4">
+                            ${state.bookings.length > 0 ? state.bookings.map(b => `
+                                <div class="p-5 bg-slate-900/50 rounded-2xl border ${b.status === 'Confirmed' ? 'border-emerald-500/30' : (b.status === 'Cancelled' ? 'border-rose-500/30 opacity-60' : 'border-amber-500/30')}">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-[10px] font-black px-2 py-1 rounded ${b.status === 'Confirmed' ? 'bg-emerald-500/10 text-emerald-500' : (b.status === 'Cancelled' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500')} uppercase">${b.status}</span>
+                                        ${b.tableNum ? `<span class="text-white font-black text-sm">Table #${b.tableNum}</span>` : ''}
+                                    </div>
+                                    <p class="text-white font-bold text-sm">${b.date} @ ${b.time}</p>
+                                    <p class="text-slate-500 text-[10px] font-bold uppercase mt-1">${b.guests}</p>
+                                </div>
+                            `).join('') : '<p class="text-slate-600 italic text-sm text-center py-10">No active requests.</p>'}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // --- MANAGER PORTAL ---
+        function renderManagerDash() {
+            document.getElementById('view-title').innerText = "Floor Control";
+            const filtered = state.tables.filter(t => t.id.toString().includes(state.searchQuery));
+            
+            content.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    <div class="lg:col-span-3 space-y-6">
+                        <div class="flex items-center relative">
+                            <svg class="w-5 h-5 text-slate-600 absolute left-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            <input type="text" oninput="state.searchQuery = this.value; renderManagerDash()" placeholder="Search Tables..." class="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-14 py-4 text-white outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${filtered.map(t => `
+                                <div class="glass-card p-6 rounded-3xl border-l-4 ${t.status === 'Available' ? 'border-l-emerald-500' : 'border-l-rose-500'}">
+                                    <div class="flex justify-between items-center mb-4">
+                                        <h4 class="text-2xl font-black">#${t.id}</h4>
+                                        <span class="text-[10px] font-black ${t.status === 'Available' ? 'text-emerald-500' : 'text-rose-500'} uppercase">${t.status}</span>
+                                    </div>
+                                    <button onclick="setTableStatus(${t.id}, 'Available')" class="w-full py-2 rounded-xl text-[10px] font-black border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Mark Available</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card p-6 rounded-[2.5rem] h-fit sticky top-28">
+                        <h3 class="text-white font-bold mb-6 flex justify-between">Queue <span class="bg-indigo-600 px-2 py-0.5 rounded text-xs">${state.bookings.filter(b=>b.status==='Pending').length}</span></h3>
+                        <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                            ${state.bookings.filter(b => b.status === 'Pending').map(b => `
+                                <div class="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <p class="text-white font-bold text-sm leading-none">${b.name}</p>
+                                            <p class="text-slate-500 text-[10px] font-bold mt-1">${b.guests} Guests</p>
+                                        </div>
+                                        <button onclick="cancelBooking(${b.id})" class="text-rose-500 hover:text-rose-400 font-bold text-[10px] uppercase tracking-tighter">Cancel</button>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <select id="allot-${b.id}" class="flex-1 bg-slate-800 text-[10px] p-2 rounded-lg border-none text-white outline-none">
+                                            <option value="">Select Table</option>
+                                            ${state.tables.filter(t=>t.status==='Available').map(t=>`<option value="${t.id}">Table ${t.id}</option>`)}
+                                        </select>
+                                        <button onclick="allotTable(${b.id})" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-[10px] font-black shadow-lg">ALLOT</button>
+                                    </div>
+                                </div>
+                            `).join('') || '<p class="text-slate-600 text-xs text-center py-6 italic">No pending requests</p>'}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // --- HANDLERS ---
+        function handleCustomerBooking(e) {
+            e.preventDefault();
+            state.bookings.unshift({
+                id: Date.now(),
+                name: document.getElementById('c-name').value,
+                guests: document.getElementById('c-guests').value,
+                date: document.getElementById('c-date').value,
+                time: document.getElementById('c-time').value,
+                status: 'Pending',
+                tableNum: null
+            });
+            alert('Booking request sent!');
+            renderCustomerPortal();
+        }
+
+        function allotTable(bookingId) {
+            const tableId = document.getElementById(`allot-${bookingId}`).value;
+            if(!tableId) return alert('Select a table first');
+
+            const bIdx = state.bookings.findIndex(b => b.id === bookingId);
+            state.bookings[bIdx].status = 'Confirmed';
+            state.bookings[bIdx].tableNum = tableId;
+
+            const tIdx = state.tables.findIndex(t => t.id == tableId);
+            state.tables[tIdx].status = 'Occupied';
+
+            renderManagerDash();
+        }
+
+        function cancelBooking(bookingId) {
+            if(!confirm('Are you sure you want to cancel this booking?')) return;
+            const bIdx = state.bookings.findIndex(b => b.id === bookingId);
+            
+            // If it was already confirmed, free the table first
+            if(state.bookings[bIdx].tableNum) {
+                const tIdx = state.tables.findIndex(t => t.id == state.bookings[bIdx].tableNum);
+                if(tIdx !== -1) state.tables[tIdx].status = 'Available';
+            }
+
+            state.bookings[bIdx].status = 'Cancelled';
+            renderManagerDash();
+        }
+
+        function setTableStatus(id, s) { 
+            const idx = state.tables.findIndex(t => t.id === id); 
+            state.tables[idx].status = s; 
+            renderManagerDash(); 
+        }
+
+        function setRole(r) { state.role = r; state.page = 'login'; updateUI(); }
+        function logout() { state.page = 'roleSelection'; state.role = null; updateUI(); }
+        function renderNav() {
+            document.getElementById('nav-links').innerHTML = `<button class="flex items-center w-full px-4 py-4 rounded-2xl sidebar-active font-bold text-sm">Main Terminal</button>`;
+        }
         function renderRoleSelection() {
-            const html = `
-                <p class="text-gray-600 text-center mb-8">Please select your role to proceed with the system access.</p>
-                <div class="space-y-4 md:space-y-0 md:flex md:space-x-4">
-                    <button id="btn-customer" class="w-full py-3 text-lg font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/50 transition duration-150">
-                        I am a Customer
-                    </button>
-                    <button id="btn-manager" class="w-full py-3 text-lg font-semibold rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-500/50 transition duration-150">
-                        I am a Manager
-                    </button>
-                </div>
-                <div class="mt-6 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-lg text-sm text-center">
-                    Note: This is a front-end simulation. No real credentials are required for login.
-                </div>
-            `;
-            renderView(html, 'Select Your Role');
+            content.innerHTML = `<div class="max-w-md mx-auto mt-32 text-center">
+                <h1 class="text-6xl font-black mb-12 tracking-tighter">RESERVA<span class="text-indigo-500">PRO</span></h1>
+                <div class="grid gap-4"><button onclick="setRole('customer')" class="p-8 glass-card rounded-[2rem] text-left hover:border-indigo-500 transition-all">
+                <span class="text-xs font-black text-indigo-400 block mb-1">GUEST</span><h3 class="font-bold text-2xl">Make Reservation</h3></button>
+                <button onclick="setRole('manager')" class="p-8 glass-card rounded-[2rem] text-left hover:border-emerald-500 transition-all">
+                <span class="text-xs font-black text-emerald-400 block mb-1">STAFF</span><h3 class="font-bold text-2xl">Table Allotment</h3></button></div></div>`;
+        }
+        function renderLogin() {
+            content.innerHTML = `<div class="max-w-sm mx-auto mt-32 glass-card p-10 rounded-[2.5rem] shadow-2xl">
+                <h2 class="text-2xl font-black text-white mb-8 capitalize">${state.role} Login</h2>
+                <div class="space-y-4"><input type="text" class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white outline-none" placeholder="Username">
+                <input type="password" class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white outline-none" placeholder="Password">
+                <button onclick="state.page='dashboard'; updateUI();" class="w-full bg-indigo-600 py-4 rounded-2xl font-black text-white active:scale-95 transition-all">Sign In</button>
+                <button onclick="logout()" class="w-full text-slate-500 text-xs font-bold uppercase tracking-widest mt-2">Back</button></div></div>`;
         }
 
-        function renderLoginForm() {
-            const roleName = userRole === 'customer' ? 'Customer' : 'Manager';
-            const html = `
-                <p class="text-gray-600 mb-6 text-center">Log in as a <span class="font-semibold text-red-500">${roleName}</span>.</p>
-                <form id="login-form" class="space-y-4">
-                    <div>
-                        <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email / Username</label>
-                        <input type="text" id="email" name="email" required 
-                               class="input-field w-full px-4 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500" 
-                               placeholder="e.g., test@example.com">
-                    </div>
-                    <div>
-                        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                        <input type="password" id="password" name="password" required 
-                               class="input-field w-full px-4 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500" 
-                               placeholder="Any password will work">
-                    </div>
-                    <button type="submit" class="btn-primary w-full py-3 text-lg font-semibold rounded-lg text-white">
-                        Log In
-                    </button>
-                </form>
-                <button id="btn-back" class="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700">
-                    &larr; Change Role
-                </button>
-            `;
-            renderView(html, `${roleName} Login`);
-        }
-
-        function renderCustomerDashboard() {
-            const html = `
-                <div class="p-6 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
-                    <p class="text-lg font-semibold text-red-700 mb-4">Welcome, Customer!</p>
-                    <p class="text-gray-600 mb-6">Thank you for choosing our restaurant. You can make and manage your reservations here.</p>
-                    <div class="space-y-3">
-                        <button id="btn-make-reservation" class="w-full py-3 font-medium rounded-lg text-white bg-red-600 hover:bg-red-700">
-                            Make a New Reservation
-                        </button>
-                        <button id="btn-view-bookings" class="w-full py-3 font-medium rounded-lg text-red-600 border border-red-600 hover:bg-red-100">
-                            View My Existing Bookings
-                        </button>
-                    </div>
-                </div>
-                <button id="btn-logout" class="mt-8 w-full py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
-                    Log Out
-                </button>
-            `;
-            renderView(html, 'Customer Dashboard');
-        }
-
-        function renderReservationForm() {
-            const today = new Date().toISOString().split('T')[0];
-            const html = `
-                <h3 class="text-xl font-semibold mb-4 text-red-700">Book Your Table</h3>
-                <form id="reservation-form" class="space-y-4">
-                    <div>
-                        <label for="res-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                        <input type="date" id="res-date" name="date" required min="${today}"
-                               class="input-field w-full px-4 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500">
-                    </div>
-                    <div>
-                        <label for="res-time" class="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                        <input type="time" id="res-time" name="time" required value="19:00"
-                               class="input-field w-full px-4 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500">
-                    </div>
-                    <div>
-                        <label for="res-guests" class="block text-sm font-medium text-gray-700 mb-1">Number of Guests</label>
-                        <input type="number" id="res-guests" name="guests" required min="1" max="10" value="2"
-                               class="input-field w-full px-4 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500">
-                    </div>
-                    <button type="submit" class="btn-primary w-full py-3 text-lg font-semibold rounded-lg text-white">
-                        Confirm Reservation
-                    </button>
-                </form>
-                <button id="btn-back-to-customer-dashboard" class="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700">
-                    &larr; Back to Dashboard
-                </button>
-            `;
-            renderView(html, 'New Reservation');
-        }
-
-        function renderExistingBookings() {
-            // Mock reservation data (in a real app, this would come from a database)
-            const mockBookings = [
-                { id: 'R1001', date: '2025-11-28', time: '19:30', guests: 4, status: 'Confirmed' },
-                { id: 'R1002', date: '2025-12-05', time: '18:00', guests: 2, status: 'Confirmed' },
-            ];
-
-            const bookingRows = mockBookings.map(booking => `
-                <div class="flex justify-between items-center p-3 border-b border-gray-100 last:border-b-0">
-                    <div class="flex-grow">
-                        <p class="font-semibold text-gray-800">${booking.date} at ${booking.time}</p>
-                        <p class="text-sm text-gray-500">${booking.guests} Guests (ID: ${booking.id})</p>
-                    </div>
-                    <span class="px-3 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">${booking.status}</span>
-                </div>
-            `).join('');
-
-            const html = `
-                <h3 class="text-xl font-semibold mb-4 text-red-700">My Existing Reservations</h3>
-                <div class="bg-white border rounded-lg shadow-md divide-y divide-gray-200">
-                    ${bookingRows || '<p class="p-4 text-gray-500 text-center">You have no active bookings.</p>'}
-                </div>
-                
-                <button id="btn-back-to-customer-dashboard" class="mt-8 w-full py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
-                    &larr; Back to Dashboard
-                </button>
-            `;
-            renderView(html, 'My Bookings');
-        }
-
-        function renderManagerDashboard() {
-            const tableRows = tableData.map(table => {
-                let colorClass = '';
-                let actionButton = '';
-                let actionLabel = '';
-                let actionColor = '';
-                
-                switch(table.status) {
-                    case 'Occupied':
-                        colorClass = 'bg-red-100 text-red-800 border-l-4 border-red-500';
-                        actionLabel = 'Clear Table';
-                        actionColor = 'bg-red-500 hover:bg-red-600';
-                        break;
-                    case 'Reserved':
-                        colorClass = 'bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500';
-                        actionLabel = 'Seat Guests';
-                        actionColor = 'bg-yellow-600 hover:bg-yellow-700';
-                        break;
-                    case 'Available':
-                        colorClass = 'bg-green-100 text-green-800 border-l-4 border-green-500';
-                        actionLabel = 'Set Occupied (Mock)';
-                        actionColor = 'bg-green-500 hover:bg-green-600';
-                        break;
-                }
-                
-                // Only show action button if the table is not already fully available
-                if (table.status !== 'Available' || table.status === 'Available') {
-                    actionButton = `<button data-table-id="${table.id}" data-action="manage-table" class="action-button text-white text-xs font-medium rounded px-2 py-1 ${actionColor}">
-                                        ${actionLabel}
-                                    </button>`;
-                }
-                
-                return `
-                    <li class="p-4 flex justify-between items-center rounded-lg ${colorClass} shadow-sm">
-                        <div class="flex-grow">
-                            <span class="font-bold">Table ${table.id}</span>
-                            <span class="text-xs text-gray-600 ml-2">(Capacity: ${table.capacity})</span>
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <span class="font-medium text-sm">${table.status}</span>
-                            ${actionButton}
-                        </div>
-                    </li>
-                `;
-            }).join('');
-
-            const html = `
-                <div class="p-6 bg-green-50 border-l-4 border-green-500 rounded-lg shadow-sm">
-                    <p class="text-lg font-semibold text-green-700 mb-4">Welcome, Manager!</p>
-                    <p class="text-gray-600 mb-6">Use the actions below to manage the live status of the dining floor.</p>
-                    <h3 class="text-xl font-semibold mb-4 text-green-800">Current Table Status</h3>
-                    <ul id="table-list" class="space-y-3">
-                        ${tableRows}
-                    </ul>
-                    <button class="mt-6 w-full py-3 font-medium rounded-lg text-white bg-green-600 hover:bg-green-700">
-                        View Full Reservation List
-                    </button>
-                </div>
-                <button id="btn-logout" class="mt-8 w-full py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
-                    Log Out
-                </button>
-            `;
-            renderView(html, 'Manager Table Management');
-        }
-
-        // --- Event Handlers ---
-        
-        function handleRoleSelection(event) {
-            const target = event.target;
-            if (target.id === 'btn-customer') {
-                userRole = 'customer';
-                currentPage = 'login';
-                navigate();
-            } else if (target.id === 'btn-manager') {
-                userRole = 'manager';
-                currentPage = 'login';
-                navigate();
-            }
-        }
-
-        function handleLogin(event) {
-            event.preventDefault();
-            // Since this is a simple front-end demo, we just check if fields are filled.
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            
-            if (email && password) {
-                // Mock authentication successful
-                currentPage = userRole === 'customer' ? 'customerDashboard' : 'managerDashboard';
-                navigate();
-            } else {
-                // In a real app, you would show a message box here, but for simplicity, we rely on the required attribute.
-                console.error("Please fill out both fields.");
-            }
-        }
-
-        function handleReservationSubmit(event) {
-            event.preventDefault();
-            const date = document.getElementById('res-date').value;
-            const time = document.getElementById('res-time').value;
-            const guests = document.getElementById('res-guests').value;
-
-            // Simple "success" message
-            const message = `
-                <div class="p-4 bg-green-100 text-green-800 rounded-lg mb-4">
-                    <p class="font-semibold">Reservation Confirmed!</p>
-                    <p class="text-sm">You booked a table for ${guests} guests on ${date} at ${time}.</p>
-                </div>
-            `;
-            contentArea.innerHTML = message + contentArea.innerHTML; // Prepend message to the form area
-            
-            // For a better UX, we'll navigate back to the dashboard after a short delay
-            setTimeout(() => {
-                currentPage = 'customerDashboard';
-                navigate();
-            }, 2500); 
-        }
-
-        function handleTableAction(event) {
-            const button = event.target.closest('[data-action="manage-table"]');
-            if (!button) return;
-
-            const tableId = parseInt(button.dataset.tableId);
-            const tableIndex = tableData.findIndex(t => t.id === tableId);
-
-            if (tableIndex > -1) {
-                const currentStatus = tableData[tableIndex].status;
-                let newStatus;
-                
-                // Logic to cycle through states or reset to Available
-                switch (currentStatus) {
-                    case 'Occupied':
-                        // Clear Table -> Available
-                        newStatus = 'Available';
-                        break;
-                    case 'Reserved':
-                        // Seat Guests -> Occupied
-                        newStatus = 'Occupied';
-                        break;
-                    case 'Available':
-                        // Set Occupied (Mock) -> Occupied
-                        newStatus = 'Occupied';
-                        break;
-                    default:
-                        newStatus = 'Available';
-                }
-                
-                // Update the state
-                tableData[tableIndex].status = newStatus;
-                
-                // Re-render the manager dashboard to reflect the change
-                navigate();
-            }
-        }
-
-        function handleLogout() {
-            userRole = null;
-            currentPage = 'roleSelection';
-            navigate();
-        }
-
-        function attachEventListeners() {
-            // Role Selection Listeners
-            if (currentPage === 'roleSelection') {
-                document.getElementById('btn-customer')?.addEventListener('click', handleRoleSelection);
-                document.getElementById('btn-manager')?.addEventListener('click', handleRoleSelection);
-            }
-            // Login Form Listeners
-            else if (currentPage === 'login') {
-                document.getElementById('login-form')?.addEventListener('submit', handleLogin);
-                document.getElementById('btn-back')?.addEventListener('click', () => {
-                    currentPage = 'roleSelection';
-                    navigate();
-                });
-            }
-            // Customer Dashboard Listeners
-            else if (currentPage === 'customerDashboard') {
-                document.getElementById('btn-make-reservation')?.addEventListener('click', () => {
-                    currentPage = 'reservationForm';
-                    navigate();
-                });
-                document.getElementById('btn-view-bookings')?.addEventListener('click', () => {
-                    currentPage = 'existingBookings';
-                    navigate();
-                });
-                document.getElementById('btn-logout')?.addEventListener('click', handleLogout);
-            }
-            // Reservation Form Listeners
-            else if (currentPage === 'reservationForm') {
-                document.getElementById('reservation-form')?.addEventListener('submit', handleReservationSubmit);
-                document.getElementById('btn-back-to-customer-dashboard')?.addEventListener('click', () => {
-                    currentPage = 'customerDashboard';
-                    navigate();
-                });
-            }
-            // Existing Bookings Listeners
-            else if (currentPage === 'existingBookings') {
-                document.getElementById('btn-back-to-customer-dashboard')?.addEventListener('click', () => {
-                    currentPage = 'customerDashboard';
-                    navigate();
-                });
-            }
-            // Manager Dashboard Listeners
-            else if (currentPage === 'managerDashboard') {
-                document.getElementById('table-list')?.addEventListener('click', handleTableAction);
-                document.getElementById('btn-logout')?.addEventListener('click', handleLogout);
-            }
-        }
-
-        // --- Navigation Controller ---
-
-        function navigate() {
-            switch (currentPage) {
-                case 'roleSelection':
-                    renderRoleSelection();
-                    break;
-                case 'login':
-                    renderLoginForm();
-                    break;
-                case 'customerDashboard':
-                    renderCustomerDashboard();
-                    break;
-                case 'reservationForm':
-                    renderReservationForm();
-                    break;
-                case 'existingBookings':
-                    renderExistingBookings();
-                    break;
-                case 'managerDashboard':
-                    renderManagerDashboard();
-                    break;
-                default:
-                    // Fallback to role selection
-                    currentPage = 'roleSelection';
-                    renderRoleSelection();
-            }
-        }
-
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', navigate);
+        updateUI();
     </script>
 </body>
 </html>
